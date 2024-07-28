@@ -1,0 +1,226 @@
+#Por David Ruiz
+#Puedes usar mi script siempre y cuando me des créditos en mis redes sociales @viajatech
+#Se agredecido y dale estrella a este repositorio, gracias! 
+
+
+import pygame
+import pygame_gui
+import random
+
+# Definir constantes
+SIMULATION_WIDTH = 450
+BACKGROUND_COLOR = (0, 0, 0)  # Negro
+FOOD_COLOR = (0, 255, 0)  # Verde
+
+class Organismo:
+    def __init__(self, x, y, speed):
+        self.x = x
+        self.y = y
+        self.speed = speed
+        self.evolution_level = 1.0
+
+    def draw(self, screen, offset):
+        pygame.draw.circle(screen, (255, 0, 0), (int(self.x + offset), int(self.y)), 5)
+
+class Ecosistema:
+    def __init__(self):
+        self.organismos = []
+        self.comida = []
+        self.generaciones = 0
+        self.velocidad = 1
+
+    def add_food(self, x, y):
+        self.comida.append((x, y))
+
+    def simular_paso(self, tasa_comida, tasa_mutacion):
+        # Añadir comida
+        if random.random() < tasa_comida:
+            self.add_food(random.randint(0, SIMULATION_WIDTH), random.randint(0, 800))
+
+        # Mover organismos
+        for organismo in self.organismos:
+            dx = random.uniform(-1, 1) * organismo.speed * self.velocidad
+            dy = random.uniform(-1, 1) * organismo.speed * self.velocidad
+            organismo.x = max(0, min(SIMULATION_WIDTH, organismo.x + dx))
+            organismo.y = max(0, min(800, organismo.y + dy))
+
+        # Comprobar colisiones con comida
+        for organismo in self.organismos:
+            for comida in self.comida[:]:
+                if ((organismo.x - comida[0])**2 + (organismo.y - comida[1])**2)**0.5 < 5:
+                    self.comida.remove(comida)
+                    organismo.evolution_level += 0.1
+
+        # Reproducción y mutación
+        nuevos_organismos = []
+        for organismo in self.organismos:
+            if organismo.evolution_level > 2:
+                nuevo_speed = organismo.speed
+                if random.random() < tasa_mutacion:
+                    nuevo_speed *= random.uniform(0.9, 1.1)
+                nuevos_organismos.append(Organismo(organismo.x, organismo.y, nuevo_speed))
+                organismo.evolution_level = 1.0
+
+        self.organismos.extend(nuevos_organismos)
+        self.generaciones += 1
+
+        # Eliminar organismos si hay demasiados
+        if len(self.organismos) > 100:
+            self.organismos = self.organismos[:100]
+
+        # Añadir organismos si no hay ninguno
+        if not self.organismos:
+            self.organismos.append(Organismo(random.randint(0, SIMULATION_WIDTH), random.randint(0, 800), 1))
+
+def main():
+    pygame.init()
+    WIDTH, HEIGHT = 1200, 800
+    SIDEBAR_WIDTH = 300
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    pygame.display.set_caption("Evolution Game by Viaja Tech")
+    clock = pygame.time.Clock()
+    manager = pygame_gui.UIManager((WIDTH, HEIGHT))
+
+    # Crear elementos de la interfaz
+    sidebar = pygame_gui.elements.UIPanel(
+        relative_rect=pygame.Rect((WIDTH - SIDEBAR_WIDTH, 0), (SIDEBAR_WIDTH, HEIGHT)),
+        manager=manager
+    )
+
+    labels = [
+        "Eco 1 - Tasa de Comida",
+        "Eco 1 - Tasa de Mutación",
+        "Eco 1 - Velocidad",
+        "Eco 2 - Tasa de Comida",
+        "Eco 2 - Tasa de Mutación",
+        "Eco 2 - Velocidad"
+    ]
+
+    sliders = []
+    for i, label in enumerate(labels):
+        pygame_gui.elements.UILabel(
+            relative_rect=pygame.Rect((10, 50 + i * 60), (SIDEBAR_WIDTH - 20, 20)),
+            text=label,
+            manager=manager,
+            container=sidebar
+        )
+        if "Velocidad" in label:
+            sliders.append(pygame_gui.elements.UIHorizontalSlider(
+                relative_rect=pygame.Rect((10, 70 + i * 60), (SIDEBAR_WIDTH - 20, 20)),
+                start_value=1,
+                value_range=(1, 10),
+                manager=manager,
+                container=sidebar
+            ))
+        else:
+            sliders.append(pygame_gui.elements.UIHorizontalSlider(
+                relative_rect=pygame.Rect((10, 70 + i * 60), (SIDEBAR_WIDTH - 20, 20)),
+                start_value=0.1,
+                value_range=(0.0, 0.5),
+                manager=manager,
+                container=sidebar
+            ))
+
+    pause_button = pygame_gui.elements.UIButton(
+        relative_rect=pygame.Rect((10, HEIGHT - 90), (SIDEBAR_WIDTH - 20, 30)),
+        text='Pausar/Reanudar',
+        manager=manager,
+        container=sidebar
+    )
+
+    reset_button = pygame_gui.elements.UIButton(
+        relative_rect=pygame.Rect((10, HEIGHT - 50), (SIDEBAR_WIDTH - 20, 30)),
+        text='Reiniciar',
+        manager=manager,
+        container=sidebar
+    )
+
+    # Modificar la creación del área de estadísticas
+    stats_window = pygame_gui.elements.UIScrollingContainer(
+        relative_rect=pygame.Rect((10, HEIGHT - 250), (SIDEBAR_WIDTH - 20, 150)),
+        manager=manager,
+        container=sidebar
+    )
+
+    stats_text = pygame_gui.elements.UITextBox(
+        html_text="<font size=4>Estadísticas se mostrarán aquí...</font>",
+        relative_rect=pygame.Rect((0, 0), (SIDEBAR_WIDTH - 40, 300)),  # Aumentamos la altura para permitir desplazamiento
+        manager=manager,
+        container=stats_window
+    )
+
+    eco1 = Ecosistema()
+    eco2 = Ecosistema()
+
+    paused = False
+    running = True
+    while running:
+        time_delta = clock.tick(60)/1000.0
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # Left click
+                    x, y = event.pos
+                    if x < SIMULATION_WIDTH:
+                        eco1.add_food(x, y)
+                    elif x < 2 * SIMULATION_WIDTH:
+                        eco2.add_food(x - SIMULATION_WIDTH, y)
+            elif event.type == pygame_gui.UI_BUTTON_PRESSED:
+                if event.ui_element == pause_button:
+                    paused = not paused
+                elif event.ui_element == reset_button:
+                    eco1 = Ecosistema()
+                    eco2 = Ecosistema()
+            
+            manager.process_events(event)
+        
+        manager.update(time_delta)
+        
+        if not paused:
+            eco1.velocidad = int(sliders[2].get_current_value())
+            eco2.velocidad = int(sliders[5].get_current_value())
+            eco1.simular_paso(sliders[0].get_current_value(), sliders[1].get_current_value())
+            eco2.simular_paso(sliders[3].get_current_value(), sliders[4].get_current_value())
+        
+        screen.fill(BACKGROUND_COLOR)
+        
+        # Draw ecosystems
+        for eco, offset in [(eco1, 0), (eco2, SIMULATION_WIDTH)]:
+            for fx, fy in eco.comida:
+                pygame.draw.circle(screen, FOOD_COLOR, (int(fx + offset), int(fy)), 3)
+            for organismo in eco.organismos:
+                organismo.draw(screen, offset)
+        
+        # Draw separator line
+        pygame.draw.line(screen, (255, 255, 255), (SIMULATION_WIDTH, 0), (SIMULATION_WIDTH, HEIGHT))
+        
+        # Update and display stats
+        most_evolved_1 = max(eco1.organismos, key=lambda o: o.evolution_level) if eco1.organismos else None
+        most_evolved_2 = max(eco2.organismos, key=lambda o: o.evolution_level) if eco2.organismos else None
+        
+        stats_html = f"""
+        <font size=4>
+        Eco 1 - Organisms: {len(eco1.organismos)}<br>
+        Eco 1 - Food: {len(eco1.comida)}<br>
+        Eco 1 - Generations: {eco1.generaciones}<br>
+        Eco 1 - Most Evolved: {f'{most_evolved_1.evolution_level:.2f}' if most_evolved_1 else 'N/A'}<br>
+        Eco 1 - Speed: {f'{most_evolved_1.speed:.2f}' if most_evolved_1 else 'N/A'}<br>
+        <br>
+        Eco 2 - Organisms: {len(eco2.organismos)}<br>
+        Eco 2 - Food: {len(eco2.comida)}<br>
+        Eco 2 - Generations: {eco2.generaciones}<br>
+        Eco 2 - Most Evolved: {f'{most_evolved_2.evolution_level:.2f}' if most_evolved_2 else 'N/A'}<br>
+        Eco 2 - Speed: {f'{most_evolved_2.speed:.2f}' if most_evolved_2 else 'N/A'}<br>
+        </font>
+        """
+        stats_text.html_text = stats_html
+        stats_text.rebuild()
+        
+        manager.draw_ui(screen)
+        pygame.display.flip()
+    
+    pygame.quit()
+
+if __name__ == "__main__":
+    main()
